@@ -1,0 +1,25 @@
+# Plaud Pipeline — базовые зависимости
+# Установка: pip install -r requirements.txt
+
+# Whisper (faster-whisper по умолчанию)
+faster-whisper>=1.0.0
+imageio-ffmpeg>=0.4.9
+
+# LLM (Anthropic SDK — опционально, можно использовать только CLI или Ollama)
+anthropic>=0.40.0
+
+# PDF rendering
+reportlab>=4.0.0
+markdown>=3.5.0
+
+# Утилиты
+python-dotenv>=1.0.0
+
+# Опционально — Intel iGPU Whisper через OpenVINO:
+# openvino-genai>=2024.4
+# librosa>=0.10
+# huggingface_hub>=0.20
+
+# Опционально — NVIDIA CUDA Whisper (см. docs/06-whisper-performance.md):
+# torch  # + соответствующий index-url для вашей CUDA версии
+# nvidia-cudnn-cu12

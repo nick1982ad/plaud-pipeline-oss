@@ -1,0 +1,19 @@
+{
+  "_help_step_1": "Откройте web.plaud.ai → DevTools (F12) → Application → Local Storage → ключ tokenstr → скопируйте значение (вместе с 'bearer ' в начале или без него).",
+  "_help_step_2": "После заполнения переименуйте этот файл в config.json (.gitignore защитит реальный токен от попадания в git).",
+  "_help_region": "region: 'us' для североамериканских аккаунтов, 'eu' для европейских. При первой ошибке скрипт сам переключится.",
+  "_help_output_dir": "output_dir — куда складывать выгрузку. Относительный путь от bulk_export/ (например ./output) или абсолютный.",
+  "_help_mp3": "mp3_mode: 'off' = не качать аудио, 'untranscribed' = только сырые (без транскрипта от Plaud), 'all' = всё. Аудио весит МНОГО.",
+
+  "token": "bearer PASTE_YOUR_JWT_TOKEN_HERE",
+  "email": "",
+  "password": "",
+  "region": "us",
+
+  "output_dir": "./output",
+  "existing_dir": "",
+
+  "formats": ["transcript", "summary"],
+  "mp3_mode": "all",
+  "sleep_between_files": 0.3
+}

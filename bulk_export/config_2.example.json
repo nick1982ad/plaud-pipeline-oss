@@ -1,0 +1,19 @@
+{
+  "_help": "Конфиг для второй учётки Plaud. После заполнения переименуйте в config_2.json.",
+  "_help_token": "Залогиньтесь в web.plaud.ai под второй учёткой → F12 → Application → Local Storage → tokenstr → скопируйте сюда (вместе с 'bearer ').",
+  "_help_region": "region: 'us' или 'eu' в зависимости от регистрации аккаунта.",
+  "_help_output_dir": "Относительный путь от bulk_export/, или абсолютный. По умолчанию ./output_account2.",
+  "_help_mp3": "mp3_mode: 'off' = не качать аудио, 'untranscribed' = только сырые, 'all' = всё.",
+
+  "token": "bearer PASTE_YOUR_JWT_TOKEN_HERE",
+  "email": "",
+  "password": "",
+  "region": "eu",
+
+  "output_dir": "./output_account2",
+  "existing_dir": "",
+
+  "formats": ["transcript", "summary"],
+  "mp3_mode": "all",
+  "sleep_between_files": 0.3
+}

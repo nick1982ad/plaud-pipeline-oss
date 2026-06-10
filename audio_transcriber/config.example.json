@@ -1,0 +1,16 @@
+{
+  "_help_model": "tiny | base | small | medium | large-v3. medium = баланс качества/скорости для рус. large-v3 = максимальное качество, требует ~3GB модель.",
+  "_help_device": "auto | cpu | cuda. auto = ищет CUDA-GPU, иначе CPU.",
+  "_help_compute_type": "auto | int8 | int8_float16 | float16 | float32. auto = int8 на CPU, float16 на GPU.",
+  "_help_mode": "watch = постоянно следит за inbox/; once = разово обработать inbox и выйти.",
+
+  "model": "small",
+  "device": "auto",
+  "compute_type": "auto",
+  "language": "ru",
+  "beam_size": 5,
+  "vad_filter": true,
+
+  "mode": "watch",
+  "interval_sec": 5
+}

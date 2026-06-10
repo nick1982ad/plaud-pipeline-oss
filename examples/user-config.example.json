@@ -1,0 +1,17 @@
+{
+  "_help": "Скопируйте этот файл в корень репозитория как user-config.json и поправьте пути. .gitignore защитит реальный файл от попадания в git.",
+
+  "audio_source":   "C:/AudioRecordings",
+  "output_dir":     "C:/_Dictophone",
+  "plaud_mirror":   "C:/_Dictophone/plaud",
+  "video_source":   "C:/Lectures",
+  "book_output":    "C:/Book",
+
+  "backend":        "auto",
+
+  "whisper_model":  "small",
+  "ollama_model":   "qwen2.5:7b-instruct",
+  "ollama_url":     "http://localhost:11434",
+
+  "anthropic_api_key": ""
+}

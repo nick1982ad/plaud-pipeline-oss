@@ -1,0 +1,125 @@
+# ============================================================================
+# Plaud Pipeline — .gitignore
+# Цель: НИКАКИЕ записи, транскрипты, токены, ключи и личные данные пользователя
+#       НЕ должны попасть в git. Только код, документация и шаблоны конфигов.
+# ============================================================================
+
+# ---- Аудио / видео (исходники записей) -------------------------------------
+*.mp3
+*.wav
+*.m4a
+*.opus
+*.ogg
+*.flac
+*.aac
+*.wma
+*.mp4
+*.mkv
+*.mov
+*.MOV
+*.MP4
+*.MKV
+*.webm
+*.avi
+*.m4v
+*.wmv
+*.flv
+*.3gp
+*.ts
+*.mts
+
+# ---- Тексты / результаты пайплайна -----------------------------------------
+*-transcript.txt
+*-Summary.txt
+*-summary.md
+*-youtube.md
+*-meta.json
+INDEX.md
+BOOK_INDEX.md
+.processed.json
+.lectures_processed.json
+
+# Сгенерированные PDF (документация репозитория допускается явно, см. !ниже)
+*.pdf
+!docs/**/*.pdf
+
+# ---- Реальные конфиги с секретами (шаблоны *example*.json — оставляем) -----
+config.json
+config_2.json
+config_3.json
+user-config.json
+*.local.json
+
+# Реальные .env — никогда. Шаблоны .env.example — оставляем.
+.env
+.env.*
+!.env.example
+
+# ---- Папки рантайма пайплайна ----------------------------------------------
+output/
+output_account*/
+_logs/
+_processed/
+_inbox_stash*/
+audio_transcriber/inbox/*
+audio_transcriber/processing/*
+audio_transcriber/done/*
+audio_transcriber/_models/
+audio_transcriber/_logs/
+!audio_transcriber/inbox/.gitkeep
+!audio_transcriber/processing/.gitkeep
+!audio_transcriber/done/.gitkeep
+bulk_export/_logs/
+bulk_export/output/
+bulk_export/output_account*/
+
+# ---- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+.installed.cfg
+*.manifest
+*.spec
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Виртуальные окружения
+venv/
+.venv/
+env/
+.env-venv/
+ENV/
+
+# ---- IDE / OS --------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Прочее ----------------------------------------------------------------
+# whisper кэши моделей (большие, скачиваются автоматически)
+*.bin
+*.onnx
+*.openvino
+~/.cache/huggingface/
+
+# Stuck/crash artefacts
+*.tmp
+*.bak
+*-crash.log
+*.dump
