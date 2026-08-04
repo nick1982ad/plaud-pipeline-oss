@@ -121,11 +121,12 @@ def detect_backends():
     if os.environ.get("ANTHROPIC_API_KEY"):
         avail.append("sdk")
     # check .env
-        if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
-                if line.strip().startswith("ANTHROPIC_API_KEY=") and "PASTE_" not in line:
-                    if "sdk" not in avail: avail.append("sdk")
-                    break
+    env_path = ROOT / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.strip().startswith("ANTHROPIC_API_KEY=") and "PASTE_" not in line:
+                if "sdk" not in avail: avail.append("sdk")
+                break
     if shutil.which("claude.cmd") or shutil.which("claude"):
         avail.append("cli")
     try:
