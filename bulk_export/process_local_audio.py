@@ -119,11 +119,24 @@ def load_api_key() -> bool:
 
 
 def find_claude_cli():
-    """Find `claude` CLI executable. Returns absolute path or None."""
+    """Find `claude` CLI. Returns an argv prefix (list) or None.
+
+    On Windows `claude` is a .cmd wrapper, so cmd.exe re-parses the argument
+    list. Metacharacters (< > | &) inside --system-prompt then truncate the
+    prompt and swallow the flags that follow it — including --output-format.
+    Resolve the underlying Node entrypoint and call it directly when we can.
+    """
     for name in ("claude.cmd", "claude.exe", "claude"):
         p = shutil.which(name)
-        if p:
-            return p
+        if not p:
+            continue
+        if p.lower().endswith(".cmd"):
+            node = shutil.which("node")
+            entry = (Path(p).parent / "node_modules" / "@anthropic-ai"
+                     / "claude-code" / "cli.js")
+            if node and entry.exists():
+                return [node, str(entry)]
+        return [p]
     return None
 
 
@@ -169,7 +182,7 @@ def pick_backend(log, prefer: str | None = None):
     if prefer in (None, "auto", "cli"):
         cli = find_claude_cli()
         if cli:
-            log(f"[backend] using Claude Code CLI subscription: {cli}")
+            log(f"[backend] using Claude Code CLI subscription: {' '.join(cli)}")
             return "cli", cli
         if prefer == "cli":
             sys.exit("claude CLI not found in PATH. Install via: npm install -g @anthropic-ai/claude-code")
@@ -505,7 +518,7 @@ def _call_ollama(ollama_model: str, stem: str, transcript: str, log):
     return None
 
 
-def _call_claude_cli(claude_path: str, model: str, stem: str, transcript: str, log):
+def _call_claude_cli(claude_argv: list, model: str, stem: str, transcript: str, log):
     """Call Claude through `claude --print` (uses Claude Code subscription)."""
     user_prompt = (
         f"Транскрипт записи (имя исходного файла: {stem}):\n\n"
@@ -515,7 +528,7 @@ def _call_claude_cli(claude_path: str, model: str, stem: str, transcript: str, l
     for attempt in (1, 2, 3):
         try:
             proc = subprocess.run(
-                [claude_path,
+                [*claude_argv,
                  "--print",
                  "--model", model,
                  "--system-prompt", SYSTEM_PROMPT,

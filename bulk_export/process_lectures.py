@@ -108,9 +108,23 @@ def load_api_key() -> bool:
 
 
 def find_claude_cli():
+    """Returns an argv prefix (list) or None.
+
+    On Windows `claude` is a .cmd wrapper, so cmd.exe re-parses the argument
+    list and metacharacters (< > | &) inside --system-prompt truncate the
+    prompt and swallow the flags after it. Call the Node entrypoint directly.
+    """
     for name in ("claude.cmd", "claude.exe", "claude"):
         p = shutil.which(name)
-        if p: return p
+        if not p:
+            continue
+        if p.lower().endswith(".cmd"):
+            node = shutil.which("node")
+            entry = (Path(p).parent / "node_modules" / "@anthropic-ai"
+                     / "claude-code" / "cli.js")
+            if node and entry.exists():
+                return [node, str(entry)]
+        return [p]
     return None
 
 
@@ -141,7 +155,7 @@ def pick_backend(log, prefer: str = "auto"):
     if prefer in (None, "auto", "cli"):
         cli = find_claude_cli()
         if cli:
-            log(f"[backend] Claude CLI subscription: {cli}")
+            log(f"[backend] Claude CLI subscription: {' '.join(cli)}")
             return "cli", cli
     if prefer in (None, "auto", "ollama"):
         m = find_ollama()
@@ -380,14 +394,14 @@ def _claude_sdk(client, model, stem, transcript, log):
     return None
 
 
-def _claude_cli(claude_path, model, stem, transcript, log):
+def _claude_cli(claude_argv, model, stem, transcript, log):
     user = (f"Транскрипт лекции (имя файла: {stem}):\n\n"
             f"---\n{transcript[:MAX_TRANSCRIPT_CHARS]}\n---\n\n"
             "Сделай главу книги. Верни JSON с title и chapter_md.")
     for attempt in (1, 2, 3):
         try:
             proc = subprocess.run(
-                [claude_path, "--print", "--model", model,
+                [*claude_argv, "--print", "--model", model,
                  "--system-prompt", CHAPTER_SYSTEM,
                  "--output-format", "json",
                  "--no-session-persistence"],
