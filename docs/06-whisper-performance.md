@@ -57,23 +57,73 @@ python bulk_export/process_lectures.py --openvino --source "..."
 
 ## Когда нужен CUDA
 
-Если у вас есть NVIDIA GPU:
+Если у вас есть NVIDIA GPU. **Torch не нужен** — ctranslate2 работает с CUDA
+напрямую, нужны только две библиотеки NVIDIA:
 
 ```bash
-pip install torch --index-url https://download.pytorch.org/whl/cu124
-pip install nvidia-cudnn-cu12
+pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
 ```
 
 В `audio_transcriber/config.json`:
 ```json
 {
-  "model": "medium",
   "device": "cuda",
   "compute_type": "float16"
 }
 ```
 
-`transcribe.py` (faster-whisper) автоматически использует CUDA.
+Либо `"device": "auto"` — `transcribe.py` спросит у ctranslate2, есть ли GPU.
+
+Требования — те же, что у самого `ctranslate2` 4.x: **CUDA 12 и cuDNN 9**, то есть
+драйвер NVIDIA с поддержкой CUDA 12. Больше ничего подбирать не нужно: два пакета
+выше и есть готовый CUDA-рантайм, они не зависят ни от модели видеокарты, ни от
+установленной в системе CUDA Toolkit (его вообще может не быть).
+
+> **Почему не `torch --index-url .../cu124`.** Так советовала прошлая версия этого
+> раздела. Ставить torch ради CUDA — лишние ~2.5 ГБ и, главное, привязка к
+> конкретной сборке: `cu124` не содержит ядер для новых архитектур, `cu118` — для
+> тех, что появились после неё. Каждой видеокарте свой `--index-url`, и это
+> приходится знать заранее. `nvidia-cublas-cu12` + `nvidia-cudnn-cu12` такой
+> привязки не имеют. Сам torch для распознавания не используется — `ctranslate2`
+> работает с CUDA напрямую.
+
+### Как проверить, что GPU действительно задействован
+
+В логе `transcribe.py` при загрузке модели должно быть `on 'cuda'`. Если написано
+`on 'cpu'` или есть строка `! CUDA недоступна` — GPU не подхватился, и скрипт
+честно доработает на CPU, а не упадёт.
+
+Частые причины:
+
+| Симптом в логе | Причина |
+|---|---|
+| `Library cublas64_12.dll is not found` | не установлены пакеты `nvidia-*`; на Windows см. ниже |
+| `no kernel image is available for execution on the device` | видеокарта старее, чем поддерживают готовые колёса `ctranslate2` |
+| `CUBLAS_STATUS_NOT_SUPPORTED` | `compute_type: "int8"` на GPU — поставьте `float16` |
+| просто `on 'cpu'` | драйвер не даёт CUDA 12, либо GPU не найден |
+
+### Подводный камень на Windows
+
+DLL из pip-пакетов NVIDIA лежат в `site-packages\nvidia\<lib>\bin`, куда Windows
+не заглядывает. Причём `os.add_dll_directory()` не спасает: `ctranslate2` грузит
+cuBLAS ленивым `LoadLibrary` уже во время инференса, а тот смотрит в `PATH`.
+Симптом коварный — модель загружается успешно, а падает на первом сегменте.
+Этим занимается `register_cuda_dll_dirs()` в `transcribe.py`, отдельных действий
+не требуется.
+
+На Linux аналогичную роль играет `LD_LIBRARY_PATH` — см. README faster-whisper.
+
+### Замеры
+
+Модель `medium`, аудио 193 с, RTX 5070 Ti против Ryzen 7 8700F.
+Цифры сильно зависят от железа, это порядок величины, а не обещание:
+
+| Устройство | compute_type | время | × CPU |
+|---|---|---|---|
+| CPU | int8 (`cpu_threads: 8`) | 79.5 с | 1× |
+| GPU | float16 | 7.3 с | **10.9×** |
+| GPU | bfloat16 | 6.9 с | 11.5× |
+| GPU | int8_float16 | 8.8 с | 9.0× |
 
 ## Сравнение качества (subjective)
 

@@ -1,12 +1,14 @@
 {
-  "_help_model": "tiny | base | small | medium | large-v3. medium = баланс качества/скорости для рус. large-v3 = максимальное качество, требует ~3GB модель.",
-  "_help_device": "auto | cpu | cuda. auto = ищет CUDA-GPU, иначе CPU.",
-  "_help_compute_type": "auto | int8 | int8_float16 | float16 | float32. auto = int8 на CPU, float16 на GPU.",
+  "_help_model": "tiny | base | small | medium | large-v3. medium = баланс качества/скорости для рус. large-v3 = максимальное качество, требует ~3GB модель. Можно указать абсолютный путь к папке с уже скачанной моделью — удобно, если huggingface.co недоступен.",
+  "_help_device": "auto | cpu | cuda. auto = спросить ctranslate2 и взять GPU, если он есть. Для GPU нужны pip-пакеты nvidia-cublas-cu12 и nvidia-cudnn-cu12 (torch НЕ нужен). Если GPU или библиотек нет — код откатится на CPU с сообщением в логе, ничего не сломается.",
+  "_help_compute_type": "auto | int8 | int8_float16 | float16 | float32 | bfloat16. auto = int8 на CPU, float16 на GPU. На CPU берите int8: float16 там не поддерживается.",
+  "_help_cpu_threads": "Число потоков CPU (для device=cpu). 0 = дефолт CTranslate2. Оптимум обычно равен числу ФИЗИЧЕСКИХ ядер: занимать все логические (SMT) медленнее, потоки конкурируют за одни исполнительные блоки. Загрузка ~50% в диспетчере задач — это норма, а не недоиспользование.",
   "_help_mode": "watch = постоянно следит за inbox/; once = разово обработать inbox и выйти.",
 
   "model": "small",
   "device": "auto",
   "compute_type": "auto",
+  "cpu_threads": 0,
   "language": "ru",
   "beam_size": 5,
   "vad_filter": true,

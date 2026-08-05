@@ -66,7 +66,72 @@ def load_config():
     return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
 
+def register_cuda_dll_dirs():
+    """Сделать CUDA-библиотеки из pip-пакетов видимыми для ctranslate2 (Windows).
+
+    Пакеты nvidia-cublas-cu12 / nvidia-cudnn-cu12 кладут DLL в
+    site-packages\\nvidia\\<lib>\\bin, куда Windows сама не заглядывает.
+    ctranslate2 грузит их ленивым LoadLibrary уже во время инференса, а он
+    смотрит в PATH — одного os.add_dll_directory() недостаточно, иначе получаем
+    "Library cublas64_12.dll is not found or cannot be loaded" не при загрузке
+    модели, а на первом же сегменте.
+
+    Вызывать ДО импорта faster_whisper. Без пакетов nvidia — тихо ничего не делает.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        import nvidia
+    except ImportError:
+        return []
+    added = []
+    # nvidia — namespace-пакет: __file__ is None, каталоги лежат в __path__.
+    for root in map(Path, nvidia.__path__):
+        for sub in ("cublas", "cudnn", "cuda_nvrtc"):
+            p = root / sub / "bin"
+            if not p.is_dir():
+                continue
+            try:
+                os.add_dll_directory(str(p))
+            except OSError:
+                continue
+            os.environ["PATH"] = f"{p}{os.pathsep}{os.environ.get('PATH', '')}"
+            added.append(sub)
+    return added
+
+
+def detect_device():
+    """cuda если ctranslate2 видит GPU, иначе cpu.
+
+    Раньше здесь спрашивали torch, которого в окружении нет — из-за чего
+    device="auto" молча и всегда давал cpu. ctranslate2 и так уже зависимость.
+    """
+    try:
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
+            return "cuda"
+    except Exception:
+        pass
+    return "cpu"
+
+
+def _warmup(model):
+    """Один холостой инференс сразу после загрузки модели.
+
+    ctranslate2 грузит cuBLAS лениво — при первом encode(), а не в конструкторе.
+    Без прогрева отсутствующая DLL всплывает посреди батча, когда откатываться
+    уже поздно. Заодно прогреваются CUDA-ядра, и первый реальный файл идёт быстрее.
+    """
+    import numpy as np
+    segments, _ = model.transcribe(np.zeros(16000, dtype=np.float32),
+                                   language="en", beam_size=1, vad_filter=False)
+    list(segments)          # генератор ленивый — досушиваем, иначе encode не вызовется
+
+
 def load_model(cfg):
+    # ДО импорта faster_whisper — иначе ctranslate2 не найдёт cuBLAS/cuDNN.
+    cuda_libs = register_cuda_dll_dirs()
+
     try:
         from faster_whisper import WhisperModel
     except ImportError:
@@ -87,17 +152,34 @@ def load_model(cfg):
     compute_type = cfg.get("compute_type", "auto")
 
     if device == "auto":
-        try:
-            import torch
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        except ImportError:
-            device = "cpu"
+        device = detect_device()
     if compute_type == "auto":
         compute_type = "float16" if device == "cuda" else "int8"
+    if device == "cuda" and cuda_libs:
+        print(f"[model] CUDA-библиотеки подхвачены из pip-пакетов: {', '.join(cuda_libs)}")
 
-    print(f"[model] loading {model_name!r} on {device!r} (compute_type={compute_type!r})")
+    # 0 = дефолт CTranslate2: число ФИЗИЧЕСКИХ ядер (SMT-потоки не используются).
+    cpu_threads = int(cfg.get("cpu_threads", 0))
+
+    print(f"[model] loading {model_name!r} on {device!r} "
+          f"(compute_type={compute_type!r}, cpu_threads={cpu_threads or 'auto'})")
     print(f"[model] first run downloads ~MB-GB of model files to ~/.cache/huggingface/")
-    return WhisperModel(model_name, device=device, compute_type=compute_type)
+    try:
+        model = WhisperModel(model_name, device=device, compute_type=compute_type,
+                             cpu_threads=cpu_threads)
+        if device == "cuda":
+            _warmup(model)
+    except Exception as e:
+        if device != "cuda":
+            raise
+        # Нет CUDA-DLL, не тот compute_type, не те ядра под архитектуру GPU —
+        # деградируем в рабочий режим вместо падения всего батча.
+        print(f"[model] ! CUDA недоступна ({type(e).__name__}: {str(e)[:160]})")
+        print(f"[model] откат на CPU (int8). Проверьте device/compute_type в config.json")
+        device, compute_type = "cpu", "int8"
+        model = WhisperModel(model_name, device=device, compute_type=compute_type,
+                             cpu_threads=cpu_threads)
+    return model
 
 
 def format_ts(seconds):
