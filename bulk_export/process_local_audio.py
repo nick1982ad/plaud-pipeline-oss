@@ -81,6 +81,9 @@ DEFAULT_OUTPUT = Path(USER_CONFIG["output_dir"])
 CLAUDE_MODEL = "claude-sonnet-4-6"
 MAX_TRANSCRIPT_CHARS = 200_000
 CLAUDE_MAX_TOKENS = 4096
+# A successful call on a 70-120 KB transcript was measured at up to 121 s, so
+# the previous 180 s left almost no margin. Override with CLAUDE_CLI_TIMEOUT.
+CLI_TIMEOUT_SEC = int(os.environ.get("CLAUDE_CLI_TIMEOUT", "600"))
 
 # Local LLM via Ollama (offline backend) — env > user-config > defaults
 OLLAMA_URL = os.environ.get("OLLAMA_URL", USER_CONFIG.get("ollama_url", "http://localhost:11434"))
@@ -392,6 +395,34 @@ def _extract_json(text: str):
         return None
 
 
+
+def _cli_error_detail(proc) -> str:
+    """Human-readable reason a `claude --print` run failed.
+
+    With --output-format json the CLI reports API failures in STDOUT, as an
+    envelope carrying is_error / api_error_status / result, and leaves stderr
+    empty. Logging stderr alone therefore drops the actual cause — expired
+    OAuth token, rate limit, unknown model — and shows a bare exit code.
+    """
+    parts = []
+    raw = (proc.stdout or "").strip()
+    if raw:
+        try:
+            env = json.loads(raw)
+        except json.JSONDecodeError:
+            parts.append(f"stdout: {raw[:300]}")
+        else:
+            status = env.get("api_error_status")
+            if status:
+                parts.append(f"API {status}")
+            msg = env.get("result") or env.get("error") or ""
+            if msg:
+                parts.append(re.sub(r"\s+", " ", str(msg))[:300])
+    err = (proc.stderr or "").strip()
+    if err:
+        parts.append(f"stderr: {err[:200]}")
+    return " | ".join(parts) or "(no detail in either stdout or stderr)"
+
 def call_claude(backend, model: str, stem: str, transcript: str, log):
     """Universal LLM caller. `backend` = ('sdk'|'cli'|'ollama', payload)."""
     kind, payload = backend
@@ -526,17 +557,18 @@ def _call_claude_cli(claude_path: str, model: str, stem: str, transcript: str, l
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=180,
+                timeout=CLI_TIMEOUT_SEC,
             )
         except subprocess.TimeoutExpired:
-            log(f"  ! claude CLI timeout (attempt {attempt})")
+            log(f"  ! claude CLI did not answer within {CLI_TIMEOUT_SEC}s "
+                f"(attempt {attempt}); raise CLAUDE_CLI_TIMEOUT to allow longer")
             continue
         except Exception as e:
             log(f"  ! CLI launch error attempt {attempt}: {e}")
             time.sleep(5)
             continue
         if proc.returncode != 0:
-            log(f"  ! claude CLI exit {proc.returncode}: {proc.stderr[:300]}")
+            log(f"  ! claude CLI exit {proc.returncode}: {_cli_error_detail(proc)}")
             time.sleep(5)
             continue
         raw = proc.stdout.strip()
@@ -544,6 +576,11 @@ def _call_claude_cli(claude_path: str, model: str, stem: str, transcript: str, l
             cli_envelope = json.loads(raw)
         except json.JSONDecodeError:
             log(f"  ! CLI returned non-JSON envelope (attempt {attempt}); head: {raw[:200]!r}")
+            continue
+        if cli_envelope.get("is_error"):
+            # The CLI can exit 0 and still report the failure in the envelope.
+            log(f"  ! claude CLI reported an error: {_cli_error_detail(proc)}")
+            time.sleep(5)
             continue
         text = cli_envelope.get("result", "")
         usage = cli_envelope.get("usage", {})

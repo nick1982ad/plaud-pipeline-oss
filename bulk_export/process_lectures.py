@@ -51,6 +51,8 @@ USER_CONFIG_PATH = PORTABLE_ROOT / "user-config.json"
 CLAUDE_MODEL = "claude-sonnet-4-6"
 MAX_TRANSCRIPT_CHARS = 200_000
 CLAUDE_MAX_TOKENS = 8192
+# Chapters run longer than meeting summaries. Override with CLAUDE_CLI_TIMEOUT.
+CLI_TIMEOUT_SEC = int(os.environ.get("CLAUDE_CLI_TIMEOUT", "900"))
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v", ".wmv",
               ".flv", ".3gp", ".ts", ".mts"}
@@ -339,6 +341,34 @@ def _extract_json(text: str):
     except json.JSONDecodeError: return None
 
 
+
+def _cli_error_detail(proc) -> str:
+    """Human-readable reason a `claude --print` run failed.
+
+    With --output-format json the CLI reports API failures in STDOUT, as an
+    envelope carrying is_error / api_error_status / result, and leaves stderr
+    empty. Logging stderr alone therefore drops the actual cause — expired
+    OAuth token, rate limit, unknown model — and shows a bare exit code.
+    """
+    parts = []
+    raw = (proc.stdout or "").strip()
+    if raw:
+        try:
+            env = json.loads(raw)
+        except json.JSONDecodeError:
+            parts.append(f"stdout: {raw[:300]}")
+        else:
+            status = env.get("api_error_status")
+            if status:
+                parts.append(f"API {status}")
+            msg = env.get("result") or env.get("error") or ""
+            if msg:
+                parts.append(re.sub(r"\s+", " ", str(msg))[:300])
+    err = (proc.stderr or "").strip()
+    if err:
+        parts.append(f"stderr: {err[:200]}")
+    return " | ".join(parts) or "(no detail in either stdout or stderr)"
+
 def call_claude(backend, model: str, stem: str, transcript: str, log):
     kind, payload = backend
     if kind == "sdk":
@@ -392,16 +422,19 @@ def _claude_cli(claude_path, model, stem, transcript, log):
                  "--output-format", "json",
                  "--no-session-persistence"],
                 input=user, capture_output=True, text=True,
-                encoding="utf-8", errors="replace", timeout=300,
+                encoding="utf-8", errors="replace", timeout=CLI_TIMEOUT_SEC,
             )
         except subprocess.TimeoutExpired:
-            log(f"  ! CLI timeout attempt {attempt}"); continue
+            log(f"  ! CLI did not answer within {CLI_TIMEOUT_SEC}s (attempt {attempt}); "
+                f"raise CLAUDE_CLI_TIMEOUT to allow longer"); continue
         if proc.returncode != 0:
-            log(f"  ! CLI exit {proc.returncode}: {proc.stderr[:200]}"); time.sleep(5); continue
+            log(f"  ! CLI exit {proc.returncode}: {_cli_error_detail(proc)}"); time.sleep(5); continue
         try:
             env = json.loads(proc.stdout)
         except json.JSONDecodeError:
             log(f"  ! CLI envelope not JSON attempt {attempt}"); continue
+        if env.get("is_error"):
+            log(f"  ! CLI reported an error: {_cli_error_detail(proc)}"); time.sleep(5); continue
         text = env.get("result", "")
         usage = env.get("usage", {})
         if usage: log(f"  tokens in={usage.get('input_tokens','?')} out={usage.get('output_tokens','?')}")
