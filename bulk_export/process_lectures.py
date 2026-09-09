@@ -108,25 +108,35 @@ def load_api_key() -> bool:
 
 
 def find_claude_cli():
-    """Returns an argv prefix (list) or None.
+    """Find `claude` CLI. Returns an argv prefix (list) or None.
 
-    On Windows `claude` is a .cmd wrapper, so cmd.exe re-parses the argument
-    list and metacharacters (< > | &) inside --system-prompt truncate the
-    prompt and swallow the flags after it. Call the Node entrypoint directly.
+    The Windows `claude.cmd` shim is the last resort: it is a batch file, so
+    cmd.exe re-parses the command line, and metacharacters (< > | &) inside
+    --system-prompt truncate the prompt and swallow the flags that follow it,
+    including --output-format. The failure is silent — the CLI answers with
+    plain text instead of the JSON envelope we asked for.
+
+    Resolution order:
+      1. a native claude.exe on PATH
+      2. bin/claude.exe inside the npm package   (Claude Code >= 2.1.2xx)
+      3. node + cli.js inside the npm package    (older bundled releases)
+      4. the .cmd shim itself, with a warning in the log
     """
-    for name in ("claude.cmd", "claude.exe", "claude"):
+    for name in ("claude.exe", "claude.cmd", "claude"):
         p = shutil.which(name)
         if not p:
             continue
         if p.lower().endswith(".cmd"):
+            pkg = Path(p).parent / "node_modules" / "@anthropic-ai" / "claude-code"
+            exe = pkg / "bin" / "claude.exe"
+            if exe.is_file():
+                return [str(exe)]
+            entry = pkg / "cli.js"
             node = shutil.which("node")
-            entry = (Path(p).parent / "node_modules" / "@anthropic-ai"
-                     / "claude-code" / "cli.js")
-            if node and entry.exists():
+            if node and entry.is_file():
                 return [node, str(entry)]
         return [p]
     return None
-
 
 def find_ollama():
     try:
@@ -156,6 +166,11 @@ def pick_backend(log, prefer: str = "auto"):
         cli = find_claude_cli()
         if cli:
             log(f"[backend] Claude CLI subscription: {' '.join(cli)}")
+            if cli[0].lower().endswith(".cmd"):
+                log("[backend] ! WARNING: falling back to the .cmd shim. cmd.exe will "
+                    "mangle --system-prompt (< > | are redirections) and swallow "
+                    "--output-format, so expect 'non-JSON envelope' errors. Neither "
+                    "bin/claude.exe nor cli.js was found in @anthropic-ai/claude-code")
             return "cli", cli
     if prefer in (None, "auto", "ollama"):
         m = find_ollama()
